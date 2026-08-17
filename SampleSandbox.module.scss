@@ -31,8 +31,9 @@
 .modalContent {
   background: "[theme:white, default: #ffffff]";
   padding: 1.5rem 2rem 2rem;
-  min-width: 480px;
-  max-width: 560px;
+  min-width: 520px;
+  max-width: 720px;
+  width: 100%;
   box-sizing: border-box;
   border-radius: 16px;
   overflow: hidden;
@@ -62,15 +63,39 @@
   :global {
     .ms-TextField-fieldGroup,
     .ms-ComboBox-container,
-    .ms-BasePicker-text {
+    .ms-BasePicker-text,
+    .ms-Dropdown-container,
+    .ms-DatePicker .ms-TextField-fieldGroup {
       border-radius: 10px;
       overflow: hidden;
     }
 
     .ms-TextField-fieldGroup::after,
-    .ms-ComboBox::after {
+    .ms-ComboBox::after,
+    .ms-Dropdown::after {
       border-radius: 10px;
     }
+  }
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+
+.formField {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .formRow {
+    grid-template-columns: 1fr;
+  }
+
+  .modalContent {
+    min-width: auto;
+    max-width: calc(100vw - 2rem);
   }
 }
 

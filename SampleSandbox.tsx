@@ -4,9 +4,12 @@ import styles from './SampleSandbox.module.scss';
 import type { ISampleSandboxProps } from './ISampleSandboxProps';
 import {
   ComboBox,
+  DatePicker,
   DefaultButton,
+  Dropdown,
   Icon,
   IComboBoxOption,
+  IDropdownOption,
   IStackTokens,
   Label,
   MessageBar,
@@ -24,10 +27,14 @@ import { SPHttpClient } from '@microsoft/sp-http';
 
 initializeIcons();
 
-interface ITipForm {
+type EntryType = 'productTip' | 'incident';
+
+interface IFormState {
+  entryType: EntryType;
   productToolName: string;
-  tipName: string;
-  tipDescription: string;
+  title: string;
+  description: string;
+  buImpact: string;
 }
 
 interface ISPPeoplePickerUserEntity {
@@ -38,6 +45,11 @@ interface ISPPeoplePickerUserEntity {
   };
   Key: string;
 }
+
+const typeOptions: IDropdownOption[] = [
+  { key: 'productTip', text: 'Product Tip' },
+  { key: 'incident', text: 'Incident' }
+];
 
 const productOptions: IComboBoxOption[] = [
   { key: 'teams', text: 'Microsoft Teams' },
@@ -66,6 +78,14 @@ const pickerSuggestionsProps: IBasePickerSuggestionsProps = {
   noResultsFoundText: 'No results found',
   loadingText: 'Loading'
 };
+
+const emptyForm = (): IFormState => ({
+  entryType: 'productTip',
+  productToolName: '',
+  title: '',
+  description: '',
+  buImpact: ''
+});
 
 const searchPeople = async (
   filterText: string,
@@ -132,23 +152,32 @@ const SampleSandbox: React.FC<ISampleSandboxProps> = (props) => {
 
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [submitted, setSubmitted] = useState<boolean>(false);
+  const [submittedType, setSubmittedType] = useState<EntryType>('productTip');
   const [authors, setAuthors] = useState<IPersonaProps[]>(defaultAuthor);
-  const [form, setForm] = useState<ITipForm>({
-    productToolName: '',
-    tipName: '',
-    tipDescription: ''
-  });
+  const [resolvedDate, setResolvedDate] = useState<Date | undefined>(undefined);
+  const [form, setForm] = useState<IFormState>(emptyForm);
 
-  const updateField = useCallback((field: keyof ITipForm, value: string) => {
+  const isIncident = form.entryType === 'incident';
+
+  const fieldLabels = useMemo(() => ({
+    modalTitle: isIncident ? 'Submit an Incident' : 'Submit a Product Tip',
+    modalIcon: isIncident ? 'Warning' : 'Lightbulb',
+    title: isIncident ? 'Incident Title' : 'Product Tip Title',
+    description: isIncident ? 'Incident Description' : 'Tip Description',
+    author: isIncident ? 'Incident Reporter' : 'Author of the Tip',
+    titlePlaceholder: isIncident ? 'Short title for the incident' : 'Short title for your tip',
+    descriptionPlaceholder: isIncident
+      ? 'Describe what happened and how it was resolved'
+      : 'Describe the tip or list the steps'
+  }), [isIncident]);
+
+  const updateField = useCallback((field: keyof IFormState, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   }, []);
 
   const resetForm = useCallback((): void => {
-    setForm({
-      productToolName: '',
-      tipName: '',
-      tipDescription: ''
-    });
+    setForm(emptyForm());
+    setResolvedDate(undefined);
     setAuthors(defaultAuthor);
   }, [defaultAuthor]);
 
@@ -166,47 +195,68 @@ const SampleSandbox: React.FC<ISampleSandboxProps> = (props) => {
     [props]
   );
 
+  const handleTypeChange = useCallback((_: React.FormEvent<HTMLDivElement>, option?: IDropdownOption) => {
+    const entryType = (option?.key as EntryType) || 'productTip';
+    setForm((prev) => ({
+      ...prev,
+      entryType,
+      buImpact: entryType === 'incident' ? prev.buImpact : ''
+    }));
+
+    if (entryType === 'productTip') {
+      setResolvedDate(undefined);
+    }
+  }, []);
+
   const handleSubmit = useCallback((): void => {
-    if (
-      !form.productToolName.trim() ||
-      !form.tipName.trim() ||
-      !form.tipDescription.trim() ||
-      authors.length === 0
-    ) {
+    const baseValid =
+      form.productToolName.trim().length > 0 &&
+      form.title.trim().length > 0 &&
+      form.description.trim().length > 0 &&
+      authors.length > 0;
+
+    const incidentValid = !isIncident || (!!resolvedDate && form.buImpact.trim().length > 0);
+
+    if (!baseValid || !incidentValid) {
       return;
     }
 
-    console.log('Tip submitted:', {
+    console.log('Entry submitted:', {
       ...form,
+      resolvedDate: isIncident ? resolvedDate : undefined,
       author: authors[0]
     });
 
+    setSubmittedType(form.entryType);
     setSubmitted(true);
     setIsModalOpen(false);
     resetForm();
-  }, [authors, form, resetForm]);
+  }, [authors, form, isIncident, resolvedDate, resetForm]);
 
   const isFormValid =
     form.productToolName.trim().length > 0 &&
-    form.tipName.trim().length > 0 &&
-    form.tipDescription.trim().length > 0 &&
-    authors.length > 0;
+    form.title.trim().length > 0 &&
+    form.description.trim().length > 0 &&
+    authors.length > 0 &&
+    (!isIncident || (!!resolvedDate && form.buImpact.trim().length > 0));
 
   return (
     <section className={styles.sampleSandbox}>
       <div className={styles.content}>
-        <h2 className={styles.title}>Product Tips</h2>
+        <h2 className={styles.title}>Product Tips & Incidents</h2>
         <p className={styles.description}>
-          Share helpful tips about products and tools with your team.
+          Share helpful tips or report incidents about products and tools with your team.
         </p>
 
         {submitted && (
           <MessageBar messageBarType={MessageBarType.success} isMultiline={false}>
-            Your tip was submitted successfully.
+            {submittedType === 'incident'
+              ? 'Your incident was submitted successfully.'
+              : 'Your tip was submitted successfully.'}
           </MessageBar>
         )}
 
-        <PrimaryButton text="Submit a Tip" onClick={openModal} />
+        <PrimaryButton text="Submit Entry" onClick={openModal} />
 
         <Modal
           isOpen={isModalOpen}
@@ -216,46 +266,84 @@ const SampleSandbox: React.FC<ISampleSandboxProps> = (props) => {
         >
           <div className={styles.modalContent}>
             <div className={styles.modalTitleRow}>
-              <Icon iconName="Lightbulb" className={styles.modalTitleIcon} />
-              <h2 className={styles.modalTitle}>Submit a Product Tip</h2>
+              <Icon iconName={fieldLabels.modalIcon} className={styles.modalTitleIcon} />
+              <h2 className={styles.modalTitle}>{fieldLabels.modalTitle}</h2>
             </div>
 
             <Stack tokens={stackTokens} className={styles.roundedFields}>
-              <ComboBox
-                label="Product/Tool Name"
+              <Dropdown
+                label="Type"
                 required
-                options={productOptions}
-                selectedKey={productOptions.find((option) => option.text === form.productToolName)?.key}
-                text={form.productToolName}
-                allowFreeInput
-                autoComplete="on"
-                useComboBoxAsMenuWidth
-                placeholder="Search or select a product/tool"
-                onChange={(_, option, __, value) => {
-                  updateField('productToolName', option?.text || value || '');
-                }}
+                options={typeOptions}
+                selectedKey={form.entryType}
+                onChange={handleTypeChange}
               />
 
-              <TextField
-                label="Tip Name"
-                required
-                value={form.tipName}
-                onChange={(_, value) => updateField('tipName', value || '')}
-                placeholder="Short title for your tip"
-              />
+              <div className={styles.formRow}>
+                <div className={styles.formField}>
+                  <ComboBox
+                    label="Product/Tool Name"
+                    required
+                    options={productOptions}
+                    selectedKey={productOptions.find((option) => option.text === form.productToolName)?.key}
+                    text={form.productToolName}
+                    allowFreeInput
+                    autoComplete="on"
+                    useComboBoxAsMenuWidth
+                    placeholder="Search or select a product/tool"
+                    onChange={(_, option, __, value) => {
+                      updateField('productToolName', option?.text || value || '');
+                    }}
+                  />
+                </div>
+
+                <div className={styles.formField}>
+                  <TextField
+                    label={fieldLabels.title}
+                    required
+                    value={form.title}
+                    onChange={(_, value) => updateField('title', value || '')}
+                    placeholder={fieldLabels.titlePlaceholder}
+                  />
+                </div>
+              </div>
 
               <TextField
-                label="Tip Description/Steps"
+                label={fieldLabels.description}
                 required
                 multiline
                 rows={5}
-                value={form.tipDescription}
-                onChange={(_, value) => updateField('tipDescription', value || '')}
-                placeholder="Describe the tip or list the steps"
+                value={form.description}
+                onChange={(_, value) => updateField('description', value || '')}
+                placeholder={fieldLabels.descriptionPlaceholder}
               />
 
+              {isIncident && (
+                <div className={styles.formRow}>
+                  <div className={styles.formField}>
+                    <DatePicker
+                      label="Resolved Date"
+                      isRequired
+                      value={resolvedDate}
+                      onSelectDate={(date) => setResolvedDate(date || undefined)}
+                      placeholder="Select a date"
+                    />
+                  </div>
+
+                  <div className={styles.formField}>
+                    <TextField
+                      label="BU Impact"
+                      required
+                      value={form.buImpact}
+                      onChange={(_, value) => updateField('buImpact', value || '')}
+                      placeholder="Business unit(s) affected"
+                    />
+                  </div>
+                </div>
+              )}
+
               <div>
-                <Label required>Author of the Tip</Label>
+                <Label required>{fieldLabels.author}</Label>
                 <NormalPeoplePicker
                   className={styles.peoplePicker}
                   onResolveSuggestions={onResolveSuggestions}
